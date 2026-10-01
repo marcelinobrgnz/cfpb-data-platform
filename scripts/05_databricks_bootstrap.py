@@ -188,18 +188,40 @@ def json_dumps(obj) -> str:
 
 def build_delta() -> None:
     print("Creating Delta table from volume parquet...", flush=True)
+    # read_files + mergeSchema handles partition schema drift from hive parts
     run_sql(
         f"""
 CREATE OR REPLACE TABLE {CATALOG}.{SCHEMA}.complaints_delta
 USING DELTA
-AS SELECT * FROM parquet.`{VOLUME_ROOT}`
+TBLPROPERTIES (
+  'delta.columnMapping.mode' = 'name',
+  'delta.minReaderVersion' = '2',
+  'delta.minWriterVersion' = '5'
+)
+AS
+SELECT *
+FROM read_files(
+  '{VOLUME_ROOT}',
+  format => 'parquet',
+  mergeSchema => true,
+  schemaEvolutionMode => 'rescue'
+)
 """
     )
     cnt = run_sql(f"SELECT COUNT(*) AS n FROM {CATALOG}.{SCHEMA}.complaints_delta")
-    data = cnt.get("result", {}).get("data_array") or cnt.get("manifest", {})
+    data = cnt.get("result", {}).get("data_array")
     print(f"delta_count_raw={data}", flush=True)
+    n = int(data[0][0]) if data else -1
+    print(f"delta_rows={n}", flush=True)
+    if n <= 0:
+        raise RuntimeError(f"Delta table empty: {n}")
+    if n != 18_091_520:
+        print(f"WARN: expected 18091520 rows, got {n}", flush=True)
 
-    # mart equivalent
+    # Discover product / date column names after merge
+    cols = run_sql(f"SHOW COLUMNS IN {CATALOG}.{SCHEMA}.complaints_delta")
+    print(f"delta_columns_sample={cols.get('result', {}).get('data_array', [])[:30]}", flush=True)
+
     run_sql(
         f"""
 CREATE OR REPLACE TABLE {CATALOG}.{SCHEMA}.fct_complaints_by_product_month
@@ -207,7 +229,7 @@ USING DELTA
 AS
 SELECT
   Product AS product,
-  date_trunc('MONTH', to_date(`Date received`)) AS month_start,
+  date_trunc('MONTH', try_to_timestamp(`Date received`)) AS month_start,
   COUNT(*) AS complaint_count
 FROM {CATALOG}.{SCHEMA}.complaints_delta
 WHERE Product IS NOT NULL AND `Date received` IS NOT NULL

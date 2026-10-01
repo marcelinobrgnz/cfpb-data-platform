@@ -1,29 +1,31 @@
-# SNAPSHOTS checklist (fill during / after run)
+# SNAPSHOTS checklist (filled 2026-10-01)
 
 Store private images under `docs/snapshots_private/` (gitignored) or OneDrive.  
 Do **not** commit secrets / account IDs in screenshots if avoidable (crop).
 
 | ID | Capture | Path / link | Done |
 |----|---------|-------------|------|
-| A | Local ingest row count + contracts.json | | [ ] |
-| B | Snowflake `COUNT(*)` on `COMPLAINTS_RAW` | | [ ] |
-| C | `LIST` stage files | | [ ] |
-| D | `V_COMPLAINTS` sample rows | | [ ] |
-| E | `dbt build` success | | [ ] |
-| F | Mart tables in Snowflake | | [ ] |
-| G | dbt docs (optional) | | [ ] |
-| H | Airflow DAG green | | [ ] |
-| I | Airflow fail-on-test alert (optional) | | [ ] |
-| J | Databricks Parquet→Delta counts | | [ ] |
-| K | Delta table UI | | [ ] |
-| L | Architecture diagram | `architecture/architecture.png` | [ ] |
-| M | Teardown proof (`SHOW DATABASES` empty of CFPB) | | [ ] |
+| A | Local ingest row count + contracts.json | `docs/snapshots_private/*_A_contracts.txt`, `data_quality/contracts.json` | [x] |
+| B | Snowflake `COUNT(*)` on `COMPLAINTS_RAW` | `docs/snapshots_private/*_B_snowflake_raw_count.txt` (=18,091,520) | [x] |
+| C | `LIST` stage files | `docs/snapshots_private/*_C_list_stage.txt` | [x] |
+| D | `V_COMPLAINTS` sample rows | `docs/snapshots_private/*_D_v_complaints_sample.txt` | [x] |
+| E | `dbt build` success | `docs/snapshots_private/*_E_dbt_build.txt` + Airflow `dbt_build` success | [x] |
+| F | Mart tables in Snowflake | `docs/snapshots_private/*_F_mart_tables.txt` | [x] |
+| G | dbt docs | `docs/dbt_site/` — serve: `python -m http.server 8766 --directory docs/dbt_site` | [x] |
+| H | Airflow DAG green | `docs/snapshots_private/H_airflow_dag_grid.png`, `H_airflow_*.json` — DAG **success** | [x] |
+| I | Airflow fail-on-test alert | earlier failed run triggered `alert_if_upstream_failed` | [x] |
+| J | Databricks Parquet→Delta counts | `*_J_databricks_delta.txt`, `J_databricks_count_api.json` (=18,091,520) | [x] |
+| K | Delta evidence card | `docs/snapshots_private/K_databricks_delta_evidence.html` + `.png` (live UI torn down; API-reconciled evidence) | [x] |
+| L | Architecture diagram | `architecture/architecture.png` | [x] |
+| M | Teardown proof | `docs/snapshots_private/M_teardown_*.txt` | [x] |
 
-## Metrics to record
+## Metrics recorded
 
-- Local rows: ________
-- Snowflake rows: ________
-- dbt models built: ________
-- dbt tests passed: ________
-- Databricks delta rows: ________
-- Approx trial credits used: ________
+- Local rows: **18,091,520**
+- Snowflake rows: **18,091,520**
+- dbt models built: **4** (1 view + 2 tables + 1 incremental)
+- dbt tests passed: **20** (1 warn)
+- Databricks delta rows: **18,091,520**
+- Approx trial credits used: trial Snowflake MEDIUM load + XSMALL dbt; Databricks serverless SQL; S3 ~247MB (torn down)
+- Airflow: WSL Docker engine + custom `cfpb-airflow:2.9.3`; stopped with `docker compose down -v`
+- GitHub: https://github.com/marcelinobrgnz/cfpb-data-platform

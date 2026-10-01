@@ -1,6 +1,6 @@
 # Architecture diagram
 
-Create `architecture.png` (Gemini / draw.io / PowerPoint) with this exact flow:
+Polished diagram: **`architecture.png`** (also `architecture.jpg`).
 
 ```
 CFPB CSV
@@ -13,6 +13,6 @@ CFPB CSV
 ```
 
 Title: **CFPB Data Platform — peak DE (portfolio)**  
-Footer: **Trial resources · teardown same day · Marcelino Braganza**
+Caption: **18.1M rows reconciled · trial resources · teardown same day**
 
-Save as `architecture/architecture.png` and attach to LinkedIn / Featured.
+Attach `architecture/architecture.png` to LinkedIn / Featured.

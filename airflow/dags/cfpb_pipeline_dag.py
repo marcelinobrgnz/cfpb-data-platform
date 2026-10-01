@@ -2,16 +2,14 @@
 Local Airflow (2.x) — CFPB peak-DE orchestration.
 
 Pipeline:
-  validate_local → (optional note) → snowflake_load_gate → dbt_build → dq_gate
+  ingest_or_skip → validate_local → validate_snowflake → dbt_build → dq_gate
 
-Fail-on-red-tests: dbt build exits non-zero → task fails → email/log alert hook.
-
-Run with: docker compose -f airflow/docker-compose.yml up -d
+CFPB_SKIP_INGEST=1 (default in compose) skips multi-hour re-ingest when Parquet
+already exists — still validates warehouse + runs dbt with fail-on-red-tests.
 """
 from __future__ import annotations
 
 import os
-import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -39,6 +37,33 @@ def fail_if_contract_red(**_context):
     print(f"Contract status={status} OK")
 
 
+def ingest_or_skip(**_context):
+    """Re-ingest only when explicitly requested; otherwise require existing Parquet."""
+    import json
+
+    skip = os.getenv("CFPB_SKIP_INGEST", "1").lower() in ("1", "true", "yes")
+    parquet = Path(PROJECT_ROOT) / "data" / "parquet" / "complaints"
+    manifest = Path(PROJECT_ROOT) / "data" / "parquet" / "_manifest.json"
+    files = list(parquet.rglob("*.parquet")) if parquet.exists() else []
+    if skip and files:
+        rows = None
+        if manifest.exists():
+            rows = json.loads(manifest.read_text(encoding="utf-8")).get("rows")
+        print(f"SKIP ingest: {len(files)} parquet files rows={rows}")
+        return
+    if skip and not files:
+        raise FileNotFoundError(
+            "CFPB_SKIP_INGEST=1 but no parquet found — run scripts/02_ingest_to_parquet.py first"
+        )
+    import subprocess
+    import sys
+
+    subprocess.check_call(
+        [sys.executable, "scripts/02_ingest_to_parquet.py"],
+        cwd=PROJECT_ROOT,
+    )
+
+
 default_args = {
     "owner": "marcelino",
     "depends_on_past": False,
@@ -58,12 +83,9 @@ with DAG(
     tags=["cfpb", "snowflake", "dbt", "portfolio"],
 ) as dag:
 
-    ingest = BashOperator(
+    ingest = PythonOperator(
         task_id="ingest_parquet",
-        bash_command=(
-            f"cd {PROJECT_ROOT} && "
-            "python scripts/02_ingest_to_parquet.py"
-        ),
+        python_callable=ingest_or_skip,
     )
 
     validate_local = BashOperator(
@@ -74,8 +96,6 @@ with DAG(
         ),
     )
 
-    # Manual Snowflake PUT/COPY is usually done once in worksheet on portfolio day.
-    # This task re-validates warehouse counts when SNOWFLAKE_* env is present.
     validate_warehouse = BashOperator(
         task_id="validate_snowflake_rowcounts",
         bash_command=(
@@ -87,13 +107,10 @@ with DAG(
     dbt_build = BashOperator(
         task_id="dbt_build",
         bash_command=(
+            f"set -a && . {PROJECT_ROOT}/.env && set +a && "
             f"cd {PROJECT_ROOT}/dbt_cfpb && "
             "dbt build --profiles-dir . --project-dir ."
         ),
-        env={
-            **os.environ,
-            # Ensure dbt sees Snowflake secrets from Airflow env
-        },
     )
 
     dq_gate = PythonOperator(

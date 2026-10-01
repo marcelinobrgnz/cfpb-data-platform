@@ -7,8 +7,5 @@
     "complaint_id should be unique in typed view (check in Snowflake)",
     "dbt build must be green before claiming skills"
   ],
-  "snowflake_raw_rows": 18091520,
-  "status": "PASS",
-  "databricks_delta_rows": 18091520,
-  "github": "https://github.com/marcelinobrgnz/cfpb-data-platform"
+  "status": "LOCAL_ONLY"
 }

@@ -1,22 +1,25 @@
 # Local Airflow for portfolio demo — NOT for production.
-# Peak DE quality = real DAG semantics + fail-on-test; cost = $0 (Docker local).
-#
-# Usage (from repo root):
-#   docker compose -f airflow/docker-compose.yml up -d
+# Usage (from repo root, WSL or Docker Desktop):
+#   docker compose -f airflow/docker-compose.yml up -d --build
 # UI: http://localhost:8080  (admin / admin)
-#
-# Mounts this repo into the container at /opt/airflow/cfpb-data-platform
 
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.9.3
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: cfpb-airflow:2.9.3
+  env_file:
+    - ../.env
   environment: &airflow-common-env
     AIRFLOW__CORE__EXECUTOR: LocalExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@postgres/airflow
     AIRFLOW__CORE__FERNET_KEY: ''
     AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
     AIRFLOW__API__AUTH_BACKENDS: 'airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session'
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: 'true'
     CFPB_PROJECT_ROOT: /opt/airflow/cfpb-data-platform
-    # Pass through Snowflake for dbt (set in .env next to compose or shell)
+    CFPB_MODE: full
+    CFPB_SKIP_INGEST: ${CFPB_SKIP_INGEST:-1}
     SNOWFLAKE_ACCOUNT: ${SNOWFLAKE_ACCOUNT:-}
     SNOWFLAKE_USER: ${SNOWFLAKE_USER:-}
     SNOWFLAKE_PASSWORD: ${SNOWFLAKE_PASSWORD:-}
@@ -26,8 +29,8 @@ x-airflow-common: &airflow-common
   volumes:
     - ../:/opt/airflow/cfpb-data-platform
     - ./dags:/opt/airflow/dags
-    - ./logs:/opt/airflow/logs
-  user: "${AIRFLOW_UID:-50000}:0"
+    - airflow_logs:/opt/airflow/logs
+  user: "50000:0"
   depends_on:
     postgres:
       condition: service_healthy
@@ -35,6 +38,7 @@ x-airflow-common: &airflow-common
 services:
   postgres:
     image: postgres:15
+    restart: unless-stopped
     environment:
       POSTGRES_USER: airflow
       POSTGRES_PASSWORD: airflow
@@ -66,6 +70,7 @@ services:
 
   airflow-webserver:
     <<: *airflow-common
+    restart: unless-stopped
     command: webserver
     ports:
       - "8080:8080"
@@ -73,11 +78,14 @@ services:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
       interval: 15s
       timeout: 10s
-      retries: 5
+      retries: 15
+      start_period: 90s
 
   airflow-scheduler:
     <<: *airflow-common
+    restart: unless-stopped
     command: scheduler
 
 volumes:
   airflow_pg:
+  airflow_logs:
